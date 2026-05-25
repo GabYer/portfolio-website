@@ -15,16 +15,22 @@ const ForexChart = dynamic(() => import("@/components/ForexChart"), {
 
 interface ForexRow {
   currency_code: string;
-  rate_kzt: number;
-  units: number;
+  rate_kzt: number | string;
+  units: number | string;
   rate_date: string;
 }
 
 interface TrendRow {
   rate_date: string;
   currency_code: string;
-  rate_per_unit: number;
-  day_change: number;
+  rate_per_unit: number | string;
+  day_change: number | string;
+}
+
+/** Postgres returns numerics as strings */
+function toNum(v: unknown): number {
+  const n = parseFloat(String(v));
+  return isNaN(n) ? 0 : n;
 }
 
 interface NewsRow {
@@ -87,7 +93,8 @@ export default function AnalyticsPage() {
 
   const latestForex = CURRENCIES.map((code) => {
     const row = forex.find((r) => r.currency_code === code);
-    return { code, rate: row ? row.rate_kzt / (row.units || 1) : null };
+    const rate = row ? toNum(row.rate_kzt) / (toNum(row.units) || 1) : null;
+    return { code, rate };
   });
 
   const chartData = trend
@@ -97,7 +104,7 @@ export default function AnalyticsPage() {
     .slice(-30);
 
   const lastPoint   = chartData[chartData.length - 1];
-  const dayChangeUp = (lastPoint?.day_change ?? 0) >= 0;
+  const dayChangeUp = toNum(lastPoint?.day_change) >= 0;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 space-y-8">
@@ -151,7 +158,7 @@ export default function AnalyticsPage() {
               {dayChangeUp
                 ? <TrendingUp className="h-4 w-4" />
                 : <TrendingDown className="h-4 w-4" />}
-              {dayChangeUp ? "+" : ""}{Number(lastPoint.day_change).toFixed(2)} KZT today
+              {dayChangeUp ? "+" : ""}{toNum(lastPoint.day_change).toFixed(2)} KZT today
             </div>
           )}
         </div>

@@ -32,11 +32,19 @@ interface KztRow {
 
 const SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "ADA"];
 
-function fmtPrice(n: number) {
+/** Postgres returns numerics as strings — coerce safely */
+function toNum(v: unknown): number {
+  const n = parseFloat(String(v));
+  return isNaN(n) ? 0 : n;
+}
+
+function fmtPrice(v: unknown) {
+  const n = toNum(v);
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function fmtCap(n: number) {
+function fmtCap(v: unknown) {
+  const n = toNum(v);
   if (n >= 1_000_000_000) return `$${(n / 1e9).toFixed(1)}B`;
   if (n >= 1_000_000)     return `$${(n / 1e6).toFixed(1)}M`;
   return `$${n.toLocaleString()}`;
@@ -134,7 +142,8 @@ export default function TradingPage() {
           </div>
         ) : (
           cryptos.map((c) => {
-            const up = (c.price_change_pct_24h ?? 0) >= 0;
+            const change = toNum(c.price_change_pct_24h);
+            const up = change >= 0;
             return (
               <div
                 key={c.coin_id}
@@ -159,7 +168,7 @@ export default function TradingPage() {
                     ? <TrendingUp className="h-3.5 w-3.5 text-green-400" />
                     : <TrendingDown className="h-3.5 w-3.5 text-red-400" />}
                   <span className={`text-sm font-medium ${up ? "text-green-400" : "text-red-400"}`}>
-                    {up ? "+" : ""}{(c.price_change_pct_24h ?? 0).toFixed(2)}%
+                    {up ? "+" : ""}{change.toFixed(2)}%
                   </span>
                 </div>
 

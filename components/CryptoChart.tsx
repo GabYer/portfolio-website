@@ -13,11 +13,18 @@ import {
 interface KztRow {
   trade_date: string;
   symbol: string;
-  avg_price_usd: number;
-  avg_price_kzt: number;
+  avg_price_usd: number | string;
+  avg_price_kzt: number | string;
 }
 
-function fmt(n: number) {
+/** Postgres returns numerics as strings */
+function toNum(v: unknown): number {
+  const n = parseFloat(String(v));
+  return isNaN(n) ? 0 : n;
+}
+
+function fmt(v: unknown) {
+  const n = toNum(v);
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -40,9 +47,16 @@ function CustomTooltip({ active, payload, label }: any) {
 export default function CryptoChart({ data }: { data: KztRow[] }) {
   if (!data.length) return null;
 
+  // Coerce string numerics from Postgres to actual numbers for recharts
+  const normalized = data.map((r) => ({
+    ...r,
+    avg_price_usd: toNum(r.avg_price_usd),
+    avg_price_kzt: toNum(r.avg_price_kzt),
+  }));
+
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+      <AreaChart data={normalized} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
         <defs>
           <linearGradient id="gradUsd" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%"  stopColor="#f97316" stopOpacity={0.3} />
