@@ -118,7 +118,44 @@ export default function TradingPage() {
         </div>
       )}
 
-      {/* Price table */}
+      {/* KZT chart — top */}
+      <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-6 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-white">Price in KZT — 30-day history</h2>
+            <p className="text-slate-500 text-xs mt-0.5">mart.mart_daily_crypto_kzt</p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {SYMBOLS.map((s) => (
+              <button
+                key={s}
+                onClick={() => setSelected(s)}
+                className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+                  selectedSymbol === s
+                    ? "bg-orange-500 text-white"
+                    : "bg-slate-800 text-slate-400 hover:text-white"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {chartLoading ? (
+          <div className="h-64 flex items-center justify-center">
+            <RefreshCw className="h-6 w-6 text-slate-600 animate-spin" />
+          </div>
+        ) : chartData.length === 0 ? (
+          <div className="h-64 flex items-center justify-center text-slate-500 text-sm">
+            No data for {selectedSymbol}
+          </div>
+        ) : (
+          <CryptoChart data={chartData} />
+        )}
+      </div>
+
+      {/* Price table — below chart */}
       <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] overflow-hidden">
         <div className="grid grid-cols-4 text-xs text-slate-500 uppercase tracking-wider px-5 py-3 border-b border-slate-800">
           <span>Asset</span>
@@ -178,43 +215,6 @@ export default function TradingPage() {
               </div>
             );
           })
-        )}
-      </div>
-
-      {/* KZT chart */}
-      <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-6 space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-white">Price in KZT — 30-day history</h2>
-            <p className="text-slate-500 text-xs mt-0.5">mart.mart_daily_crypto_kzt</p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {SYMBOLS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setSelected(s)}
-                className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
-                  selectedSymbol === s
-                    ? "bg-orange-500 text-white"
-                    : "bg-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {chartLoading ? (
-          <div className="h-64 flex items-center justify-center">
-            <RefreshCw className="h-6 w-6 text-slate-600 animate-spin" />
-          </div>
-        ) : chartData.length === 0 ? (
-          <div className="h-64 flex items-center justify-center text-slate-500 text-sm">
-            No data for {selectedSymbol}
-          </div>
-        ) : (
-          <CryptoChart data={chartData} />
         )}
       </div>
 
