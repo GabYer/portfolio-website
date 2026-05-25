@@ -1,10 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-} from "recharts";
+import dynamic from "next/dynamic";
 import { Newspaper, TrendingUp, TrendingDown, DollarSign, RefreshCw } from "lucide-react";
+
+const ForexChart = dynamic(() => import("@/components/ForexChart"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-56 flex items-center justify-center">
+      <RefreshCw className="h-6 w-6 text-slate-600 animate-spin" />
+    </div>
+  ),
+});
 
 interface ForexRow {
   currency_code: string;
@@ -28,11 +35,12 @@ interface NewsRow {
 }
 
 const CURRENCIES = ["USD", "EUR", "RUB", "CNY", "GBP"];
+
 const CATEGORY_COLORS: Record<string, string> = {
-  crypto: "bg-orange-500/20 text-orange-400 border-orange-500/30",
-  forex:  "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  news:   "bg-slate-500/20 text-slate-400 border-slate-500/30",
-  economy:"bg-green-500/20 text-green-400 border-green-500/30",
+  crypto:  "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  forex:   "bg-blue-500/20   text-blue-400   border-blue-500/30",
+  news:    "bg-slate-500/20  text-slate-400  border-slate-500/30",
+  economy: "bg-green-500/20  text-green-400  border-green-500/30",
 };
 
 function getCategoryClass(cat: string) {
@@ -41,17 +49,17 @@ function getCategoryClass(cat: string) {
 
 function timeAgo(dt: string) {
   const diff = Date.now() - new Date(dt).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 60) return `${m}m ago`;
+  const m = Math.floor(diff / 60_000);
+  if (m < 60)  return `${m}m ago`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24)  return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
 }
 
 export default function AnalyticsPage() {
-  const [forex, setForex] = useState<ForexRow[]>([]);
-  const [trend, setTrend] = useState<TrendRow[]>([]);
-  const [news, setNews] = useState<NewsRow[]>([]);
+  const [forex,  setForex]  = useState<ForexRow[]>([]);
+  const [trend,  setTrend]  = useState<TrendRow[]>([]);
+  const [news,   setNews]   = useState<NewsRow[]>([]);
   const [selectedCurrency, setSelectedCurrency] = useState("USD");
   const [loading, setLoading] = useState(true);
 
@@ -64,10 +72,12 @@ export default function AnalyticsPage() {
           fetch("/api/forex-trend"),
           fetch("/api/news"),
         ]);
-        const [fJson, tJson, nJson] = await Promise.all([fRes.json(), tRes.json(), nRes.json()]);
-        setForex(fJson.data ?? []);
-        setTrend(tJson.data ?? []);
-        setNews(nJson.data ?? []);
+        const [fJson, tJson, nJson] = await Promise.all([
+          fRes.json(), tRes.json(), nRes.json(),
+        ]);
+        setForex(fJson.data  ?? []);
+        setTrend(tJson.data  ?? []);
+        setNews(nJson.data   ?? []);
       } finally {
         setLoading(false);
       }
@@ -75,48 +85,33 @@ export default function AnalyticsPage() {
     load();
   }, []);
 
-  // Latest rate per currency
-  const latestForex = CURRENCIES.map(code => {
-    const row = forex.find(r => r.currency_code === code);
+  const latestForex = CURRENCIES.map((code) => {
+    const row = forex.find((r) => r.currency_code === code);
     return { code, rate: row ? row.rate_kzt / (row.units || 1) : null };
   });
 
-  // Chart: trend data for selected currency (oldest→newest)
   const chartData = trend
-    .filter(r => r.currency_code === selectedCurrency)
+    .filter((r) => r.currency_code === selectedCurrency)
     .slice()
     .reverse()
     .slice(-30);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
-    return (
-      <div className="rounded-xl border border-slate-700 bg-[#1a1f2e] p-3 text-sm shadow-xl">
-        <p className="text-slate-400 mb-1">{label}</p>
-        <p className="text-white font-bold">₸ {Number(payload[0].value).toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
-        {payload[0]?.payload?.day_change != null && (
-          <p className={payload[0].payload.day_change >= 0 ? "text-green-400" : "text-red-400"}>
-            {payload[0].payload.day_change >= 0 ? "+" : ""}
-            {Number(payload[0].payload.day_change).toFixed(2)} KZT
-          </p>
-        )}
-      </div>
-    );
-  };
+  const lastPoint   = chartData[chartData.length - 1];
+  const dayChangeUp = (lastPoint?.day_change ?? 0) >= 0;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 space-y-8">
 
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white">Analytics</h1>
-        <p className="text-slate-400 text-sm mt-1">Forex rates from NBK Kazakhstan · News from Tengrinews</p>
+        <p className="text-slate-400 text-sm mt-1">
+          Forex rates from NBK Kazakhstan · News from Tengrinews
+        </p>
       </div>
 
-      {/* Forex cards */}
+      {/* Forex rate cards */}
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-slate-300 flex items-center gap-2">
+        <h2 className="flex items-center gap-2 text-base font-semibold text-slate-300">
           <DollarSign className="h-4 w-4 text-blue-400" />
           Forex Rates to KZT
         </h2>
@@ -137,7 +132,7 @@ export default function AnalyticsPage() {
                 >
                   <p className="text-xs text-slate-500 mb-1">{code} / KZT</p>
                   <p className="text-lg font-bold text-white">
-                    {rate ? `₸ ${rate.toFixed(2)}` : "—"}
+                    {rate != null ? `₸ ${rate.toFixed(2)}` : "—"}
                   </p>
                 </button>
               ))}
@@ -146,21 +141,19 @@ export default function AnalyticsPage() {
 
       {/* Trend chart */}
       <section className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-6 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h2 className="text-lg font-bold text-white">{selectedCurrency}/KZT — 30-day trend</h2>
             <p className="text-slate-500 text-xs mt-0.5">mart.mart_forex_trend</p>
           </div>
-          {!loading && chartData.length > 0 && (() => {
-            const last = chartData[chartData.length - 1];
-            const up = last?.day_change >= 0;
-            return (
-              <div className={`flex items-center gap-1 text-sm font-semibold ${up ? "text-green-400" : "text-red-400"}`}>
-                {up ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                {up ? "+" : ""}{Number(last?.day_change).toFixed(2)} KZT today
-              </div>
-            );
-          })()}
+          {!loading && lastPoint && (
+            <div className={`flex items-center gap-1 text-sm font-semibold ${dayChangeUp ? "text-green-400" : "text-red-400"}`}>
+              {dayChangeUp
+                ? <TrendingUp className="h-4 w-4" />
+                : <TrendingDown className="h-4 w-4" />}
+              {dayChangeUp ? "+" : ""}{Number(lastPoint.day_change).toFixed(2)} KZT today
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -172,39 +165,13 @@ export default function AnalyticsPage() {
             No trend data for {selectedCurrency}
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis
-                dataKey="rate_date"
-                tick={{ fill: "#64748b", fontSize: 11 }}
-                tickFormatter={v => v?.slice(5)}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tick={{ fill: "#64748b", fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={v => `₸${v.toFixed(0)}`}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Line
-                type="monotone"
-                dataKey="rate_per_unit"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: "#3b82f6" }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <ForexChart data={chartData} />
         )}
       </section>
 
       {/* News feed */}
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-slate-300 flex items-center gap-2">
+        <h2 className="flex items-center gap-2 text-base font-semibold text-slate-300">
           <Newspaper className="h-4 w-4 text-orange-400" />
           Latest News
           <span className="text-xs text-slate-500 font-normal">staging.stg_news</span>
