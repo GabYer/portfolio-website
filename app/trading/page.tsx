@@ -1,250 +1,319 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { TrendingUp, TrendingDown, RefreshCw } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown, Zap } from "lucide-react";
+import { SYMBOL_LABELS, CH_SYMBOLS } from "@/lib/clickhouse";
+import type { VwapRow }    from "@/app/api/ch-vwap/route";
+import type { BuySellRow } from "@/app/api/ch-buysell/route";
+import type { OhlcvRow }   from "@/app/api/ch-trades/route";
 
-// Dynamically import recharts-based component — disables SSR to avoid
-// "window is not defined" hydration errors in Next.js App Router.
-const CryptoChart = dynamic(() => import("@/components/CryptoChart"), {
+/* ── dynamic imports (recharts needs browser APIs) ── */
+const VwapChart = dynamic(() => import("@/components/VwapChart"), {
   ssr: false,
-  loading: () => (
-    <div className="h-64 flex items-center justify-center">
-      <RefreshCw className="h-6 w-6 text-slate-600 animate-spin" />
-    </div>
-  ),
+  loading: () => <ChartSkeleton height={280} />,
+});
+const BuySellChart = dynamic(() => import("@/components/BuySellChart"), {
+  ssr: false,
+  loading: () => <ChartSkeleton height={160} />,
 });
 
-interface CryptoRow {
-  coin_id: string;
-  symbol: string;
-  current_price_usd: number;
-  price_change_pct_24h: number;
-  market_cap_usd: number;
-  // any timestamp column the table might have
-  updated_at?: string;
-  loaded_at?: string;
-  fetched_at?: string;
-  created_at?: string;
-  price_timestamp?: string;
-  last_updated?: string;
-  [key: string]: unknown;
+function ChartSkeleton({ height }: { height: number }) {
+  return (
+    <div className="flex items-center justify-center" style={{ height }}>
+      <RefreshCw className="h-5 w-5 text-slate-600 animate-spin" />
+    </div>
+  );
 }
 
-interface KztRow {
-  trade_date: string;
-  symbol: string;
-  avg_price_usd: number;
-  avg_price_kzt: number;
+/* ── helpers ── */
+function fmtUsd(v: number) {
+  return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-const SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "ADA"];
-
-/** Postgres returns numerics as strings — coerce safely */
-function toNum(v: unknown): number {
-  const n = parseFloat(String(v));
-  return isNaN(n) ? 0 : n;
+function fmtVol(v: number) {
+  if (v >= 1000) return `${(v / 1000).toFixed(2)}K`;
+  return v.toFixed(4);
 }
 
-function fmtPrice(v: unknown) {
-  const n = toNum(v);
-  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtTime(v: string) {
+  try {
+    return new Date(v).toLocaleTimeString("ru-KZ", {
+      timeZone: "Asia/Almaty",
+      hour: "2-digit", minute: "2-digit",
+    });
+  } catch { return v; }
 }
 
-function fmtCap(v: unknown) {
-  const n = toNum(v);
-  if (n >= 1_000_000_000) return `$${(n / 1e9).toFixed(1)}B`;
-  if (n >= 1_000_000)     return `$${(n / 1e6).toFixed(1)}M`;
-  return `$${n.toLocaleString()}`;
-}
+type Symbol = (typeof CH_SYMBOLS)[number];
 
+/* ═══════════════════════════════════════ */
 export default function TradingPage() {
-  const [cryptos, setCryptos]           = useState<CryptoRow[]>([]);
-  const [chartData, setChartData]       = useState<KztRow[]>([]);
-  const [selectedSymbol, setSelected]   = useState("BTC");
-  const [loading, setLoading]           = useState(true);
-  const [chartLoading, setChartLoading] = useState(false);
-  const [lastUpdate, setLastUpdate]     = useState<Date | null>(null);
-  const [dataTs, setDataTs]             = useState<string | null>(null); // timestamp from DB row
-  const [error, setError]               = useState<string | null>(null);
+  const [symbol, setSymbol]           = useState<Symbol>("BTCUSDT");
+  const [vwap,   setVwap]             = useState<VwapRow[]>([]);
+  const [buysell, setBuysell]         = useState<BuySellRow[]>([]);
+  const [ohlcv,  setOhlcv]            = useState<OhlcvRow[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error,   setError]           = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt]     = useState<Date | null>(null);
 
-  async function loadCryptos() {
+  const load = useCallback(async (sym: Symbol) => {
     setLoading(true);
     setError(null);
     try {
-      const res  = await fetch("/api/crypto");
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "API error");
-      const rows: CryptoRow[] = json.data ?? [];
-      setCryptos(rows);
-      setLastUpdate(new Date());
+      const [vRes, bRes, tRes] = await Promise.all([
+        fetch(`/api/ch-vwap?symbol=${sym}&hours=2`),
+        fetch(`/api/ch-buysell?symbol=${sym}&minutes=30`),
+        fetch(`/api/ch-trades?symbol=${sym}`),
+      ]);
 
-      // Pick the first timestamp-like column from the first row
-      const TS_COLS = ["updated_at","loaded_at","fetched_at","created_at","price_timestamp","last_updated"];
-      if (rows.length > 0) {
-        for (const col of TS_COLS) {
-          if (rows[0][col]) { setDataTs(String(rows[0][col])); break; }
-        }
-      }
+      const [vJson, bJson, tJson] = await Promise.all([
+        vRes.json(), bRes.json(), tRes.json(),
+      ]);
+
+      if (!vRes.ok) throw new Error(vJson.error ?? "VWAP fetch failed");
+      if (!bRes.ok) throw new Error(bJson.error ?? "Buy/Sell fetch failed");
+      if (!tRes.ok) throw new Error(tJson.error ?? "Trades fetch failed");
+
+      setVwap(vJson.data    ?? []);
+      setBuysell(bJson.data ?? []);
+      setOhlcv(tJson.data   ?? []);
+      setUpdatedAt(new Date());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
+      setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function loadChart(sym: string) {
-    setChartLoading(true);
-    try {
-      const res  = await fetch(`/api/crypto-kzt?symbol=${sym}`);
-      const json = await res.json();
-      setChartData((json.data ?? []).slice().reverse());
-    } finally {
-      setChartLoading(false);
-    }
-  }
+  useEffect(() => { load(symbol); }, [symbol, load]);
 
-  useEffect(() => { loadCryptos(); }, []);
-  useEffect(() => { loadChart(selectedSymbol); }, [selectedSymbol]);
+  /* ── summary stats from last VWAP row ── */
+  const lastVwap  = vwap[vwap.length - 1];
+  const firstVwap = vwap[0];
+  const priceDiff = lastVwap && firstVwap
+    ? lastVwap.vwap - firstVwap.vwap : 0;
+  const pricePct  = firstVwap?.vwap
+    ? (priceDiff / firstVwap.vwap) * 100 : 0;
+  const priceUp   = priceDiff >= 0;
+
+  /* ── buy pressure from last buy/sell row ── */
+  const lastBS     = buysell[buysell.length - 1];
+  const totalVol   = lastBS ? lastBS.buy_volume + lastBS.sell_volume : 0;
+  const buyPct     = totalVol > 0 ? (lastBS!.buy_volume / totalVol) * 100 : 50;
+  const buyDom     = buyPct >= 50;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 space-y-8">
+    <div className="mx-auto max-w-7xl px-4 py-10 space-y-6">
 
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Crypto Trading</h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Live prices from CoinGecko via PostgreSQL
-            {lastUpdate && ` · Fetched ${lastUpdate.toLocaleTimeString("ru-KZ", { timeZone: "Asia/Almaty" })}`}
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-2xl font-bold text-white">Binance Live Trading</h1>
+            <span className="flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/10 px-2.5 py-0.5 text-xs text-green-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+              ClickHouse
+            </span>
+          </div>
+          <p className="text-slate-400 text-sm">
+            trading.binance_trades · mv_vwap_1min · mv_buysell_1min
+            {updatedAt && (
+              <span className="text-slate-500">
+                {" "}· Updated {updatedAt.toLocaleTimeString("ru-KZ", { timeZone: "Asia/Almaty" })}
+              </span>
+            )}
           </p>
-          {dataTs && (
-            <p className="text-slate-500 text-xs mt-0.5">
-              Data timestamp: {new Date(dataTs).toLocaleString("ru-KZ", { timeZone: "Asia/Almaty" })}
-            </p>
-          )}
         </div>
-        <button
-          onClick={loadCryptos}
-          disabled={loading}
-          className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-4 py-2 text-sm text-white transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+
+        <div className="flex items-center gap-3">
+          {/* Symbol selector */}
+          <div className="flex gap-1.5">
+            {CH_SYMBOLS.map((s) => (
+              <button
+                key={s}
+                onClick={() => setSymbol(s)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                  symbol === s
+                    ? "bg-orange-500 text-white"
+                    : "bg-slate-800 text-slate-400 hover:text-white border border-slate-700"
+                }`}
+              >
+                {SYMBOL_LABELS[s]}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => load(symbol)}
+            disabled={loading}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-sm text-white transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {/* Error */}
+      {/* ── Error ── */}
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400 font-mono">
           {error}
         </div>
       )}
 
-      {/* KZT chart — top */}
-      <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-6 space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-white">Price in KZT — 30-day history</h2>
-            <p className="text-slate-500 text-xs mt-0.5">mart.mart_daily_crypto_kzt</p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {SYMBOLS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setSelected(s)}
-                className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
-                  selectedSymbol === s
-                    ? "bg-orange-500 text-white"
-                    : "bg-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
+      {/* ── Stats row ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Current VWAP */}
+        <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-4">
+          <p className="text-xs text-slate-500 mb-1">VWAP (last)</p>
+          <p className="text-xl font-bold text-white font-mono">
+            {loading ? "—" : lastVwap ? fmtUsd(lastVwap.vwap) : "No data"}
+          </p>
+        </div>
+
+        {/* 2h price change */}
+        <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-4">
+          <p className="text-xs text-slate-500 mb-1">2h Change</p>
+          <p className={`text-xl font-bold font-mono flex items-center gap-1 ${priceUp ? "text-green-400" : "text-red-400"}`}>
+            {loading ? "—" : (
+              <>
+                {priceUp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                {priceUp ? "+" : ""}{pricePct.toFixed(2)}%
+              </>
+            )}
+          </p>
+        </div>
+
+        {/* Buy pressure */}
+        <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-4">
+          <p className="text-xs text-slate-500 mb-1">Buy pressure (last min)</p>
+          <div className="flex items-center gap-2">
+            <p className={`text-xl font-bold font-mono ${buyDom ? "text-green-400" : "text-red-400"}`}>
+              {loading ? "—" : `${buyPct.toFixed(1)}%`}
+            </p>
+            <span className={`text-xs ${buyDom ? "text-green-600" : "text-red-600"}`}>
+              {buyDom ? "BUY DOM" : "SELL DOM"}
+            </span>
           </div>
         </div>
 
-        {chartLoading ? (
-          <div className="h-64 flex items-center justify-center">
-            <RefreshCw className="h-6 w-6 text-slate-600 animate-spin" />
-          </div>
-        ) : chartData.length === 0 ? (
-          <div className="h-64 flex items-center justify-center text-slate-500 text-sm">
-            No data for {selectedSymbol}
+        {/* 1h volume */}
+        <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-4">
+          <p className="text-xs text-slate-500 mb-1">1h Volume</p>
+          <p className="text-xl font-bold text-white font-mono">
+            {loading ? "—" : ohlcv.length > 0
+              ? fmtVol(ohlcv.reduce((s, r) => s + r.volume, 0))
+              : "No data"}
+          </p>
+        </div>
+      </div>
+
+      {/* ── VWAP Chart ── */}
+      <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-6 space-y-3">
+        <div>
+          <h2 className="text-base font-bold text-white">
+            VWAP · {SYMBOL_LABELS[symbol]} · Last 2 hours (1-min)
+          </h2>
+          <p className="text-slate-500 text-xs mt-0.5">trading.mv_vwap_1min</p>
+        </div>
+        {loading ? (
+          <ChartSkeleton height={280} />
+        ) : vwap.length === 0 ? (
+          <div className="h-[280px] flex items-center justify-center text-slate-500 text-sm">
+            No VWAP data for {symbol}
           </div>
         ) : (
-          <CryptoChart data={chartData} />
+          <VwapChart data={vwap} />
         )}
       </div>
 
-      {/* Price table — below chart */}
+      {/* ── Buy/Sell Chart ── */}
+      <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Zap className="h-4 w-4 text-yellow-400" />
+              Buy / Sell Pressure · Last 30 minutes
+            </h2>
+            <p className="text-slate-500 text-xs mt-0.5">trading.mv_buysell_1min</p>
+          </div>
+          {!loading && lastBS && (
+            <div className="flex items-center gap-3 text-xs">
+              <span className="text-green-400">Buy {lastBS.buy_volume.toFixed(3)}</span>
+              <span className="text-red-400">Sell {lastBS.sell_volume.toFixed(3)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* pressure bar */}
+        {!loading && totalVol > 0 && (
+          <div className="flex h-2 rounded-full overflow-hidden">
+            <div className="bg-green-500 transition-all" style={{ width: `${buyPct}%` }} />
+            <div className="bg-red-500  transition-all" style={{ width: `${100 - buyPct}%` }} />
+          </div>
+        )}
+
+        {loading ? (
+          <ChartSkeleton height={160} />
+        ) : buysell.length === 0 ? (
+          <div className="h-[160px] flex items-center justify-center text-slate-500 text-sm">
+            No buy/sell data for {symbol}
+          </div>
+        ) : (
+          <BuySellChart data={buysell} />
+        )}
+      </div>
+
+      {/* ── OHLCV Table ── */}
       <div className="rounded-2xl border border-slate-800 bg-[#1a1f2e] overflow-hidden">
-        <div className="grid grid-cols-4 text-xs text-slate-500 uppercase tracking-wider px-5 py-3 border-b border-slate-800">
-          <span>Asset</span>
-          <span className="text-right">Price</span>
-          <span className="text-right">24h Change</span>
-          <span className="text-right">Market Cap</span>
+        <div className="px-5 py-4 border-b border-slate-800">
+          <h2 className="text-base font-bold text-white">
+            OHLCV · {SYMBOL_LABELS[symbol]} · Last 60 minutes (1-min bars)
+          </h2>
+          <p className="text-slate-500 text-xs mt-0.5">trading.binance_trades (aggregated)</p>
+        </div>
+
+        {/* Table header */}
+        <div className="grid grid-cols-7 text-xs text-slate-500 uppercase tracking-wider px-5 py-2 border-b border-slate-800/50">
+          <span>Time (Almaty)</span>
+          <span className="text-right">Open</span>
+          <span className="text-right">High</span>
+          <span className="text-right">Low</span>
+          <span className="text-right">Close</span>
+          <span className="text-right">Volume</span>
+          <span className="text-right">Trades</span>
         </div>
 
         {loading ? (
           Array(8).fill(0).map((_, i) => (
-            <div key={i} className="grid grid-cols-4 px-5 py-4 border-b border-slate-800/50 animate-pulse">
-              <div className="h-4 bg-slate-700 rounded w-20" />
-              <div className="h-4 bg-slate-700 rounded w-24 ml-auto" />
-              <div className="h-4 bg-slate-700 rounded w-16 ml-auto" />
-              <div className="h-4 bg-slate-700 rounded w-20 ml-auto" />
+            <div key={i} className="grid grid-cols-7 px-5 py-3 border-b border-slate-800/40 animate-pulse gap-3">
+              {Array(7).fill(0).map((_, j) => (
+                <div key={j} className="h-3.5 bg-slate-700/60 rounded ml-auto w-full" />
+              ))}
             </div>
           ))
-        ) : cryptos.length === 0 ? (
+        ) : ohlcv.length === 0 ? (
           <div className="px-5 py-10 text-center text-slate-500 text-sm">
-            No data — check DATABASE_URL in Vercel environment variables
+            No OHLCV data for {symbol}
           </div>
         ) : (
-          cryptos.map((c) => {
-            const change = toNum(c.price_change_pct_24h);
-            const up = change >= 0;
-
-            // Find whichever timestamp column exists in this row
-            const TS_COLS = ["updated_at","loaded_at","fetched_at","created_at","price_timestamp","last_updated"];
-            const rowTs = TS_COLS.map(k => c[k]).find(v => v != null);
-
+          ohlcv.map((row, i) => {
+            const up = row.close >= row.open;
             return (
               <div
-                key={c.coin_id}
-                className="grid grid-cols-4 px-5 py-4 border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors"
+                key={i}
+                className="grid grid-cols-7 px-5 py-3 border-b border-slate-800/40 hover:bg-slate-800/20 transition-colors text-sm font-mono"
               >
-                <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 shrink-0 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
-                    {c.symbol?.slice(0, 2)}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">{c.symbol}</p>
-                    <p className="text-xs text-slate-500 capitalize">{c.coin_id}</p>
-                    {rowTs && (
-                      <p className="text-[10px] text-slate-600 font-mono">
-                        {new Date(String(rowTs)).toLocaleString("ru-KZ", { timeZone: "Asia/Almaty" })}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="text-right self-center">
-                  <p className="text-sm font-mono text-white">{fmtPrice(c.current_price_usd)}</p>
-                </div>
-
-                <div className="flex items-center justify-end gap-1 self-center">
-                  {up
-                    ? <TrendingUp className="h-3.5 w-3.5 text-green-400" />
-                    : <TrendingDown className="h-3.5 w-3.5 text-red-400" />}
-                  <span className={`text-sm font-medium ${up ? "text-green-400" : "text-red-400"}`}>
-                    {up ? "+" : ""}{change.toFixed(2)}%
-                  </span>
-                </div>
-
-                <div className="text-right self-center text-sm text-slate-400">
-                  {c.market_cap_usd ? fmtCap(c.market_cap_usd) : "—"}
-                </div>
+                <span className="text-slate-400 text-xs self-center">{fmtTime(row.minute)}</span>
+                <span className="text-right text-slate-300">{fmtUsd(row.open)}</span>
+                <span className="text-right text-green-400">{fmtUsd(row.high)}</span>
+                <span className="text-right text-red-400">{fmtUsd(row.low)}</span>
+                <span className={`text-right font-bold ${up ? "text-green-400" : "text-red-400"}`}>
+                  {fmtUsd(row.close)}
+                </span>
+                <span className="text-right text-slate-400">{fmtVol(row.volume)}</span>
+                <span className="text-right text-slate-500">{row.trade_count.toLocaleString()}</span>
               </div>
             );
           })
