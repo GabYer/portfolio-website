@@ -23,13 +23,18 @@ function toNum(v: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
+/** Trim Postgres timestamp to YYYY-MM-DD */
+function toDate(v: unknown): string {
+  return String(v).slice(0, 10);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   const change = toNum(payload[0]?.payload?.day_change);
   return (
     <div className="rounded-xl border border-slate-700 bg-[#1a1f2e] p-3 text-sm shadow-xl">
-      <p className="text-slate-400 mb-1">{label}</p>
+      <p className="text-slate-400 mb-1">{toDate(label)}</p>
       <p className="text-white font-bold">
         ₸ {toNum(payload[0].value).toLocaleString("en-US", { minimumFractionDigits: 2 })}
       </p>
@@ -43,9 +48,10 @@ function CustomTooltip({ active, payload, label }: any) {
 export default function ForexChart({ data }: { data: TrendRow[] }) {
   if (!data.length) return null;
 
-  // Coerce string numerics from Postgres to actual numbers for recharts
+  // Coerce types and normalize date format (strip time part)
   const normalized = data.map((r) => ({
     ...r,
+    rate_date:     toDate(r.rate_date),    // "2024-01-15T00:00:00.000Z" → "2024-01-15"
     rate_per_unit: toNum(r.rate_per_unit),
     day_change:    toNum(r.day_change),
   }));
@@ -57,7 +63,7 @@ export default function ForexChart({ data }: { data: TrendRow[] }) {
         <XAxis
           dataKey="rate_date"
           tick={{ fill: "#64748b", fontSize: 11 }}
-          tickFormatter={(v) => String(v)?.slice(5)}
+          tickFormatter={(v) => toDate(v).slice(5)}
           tickLine={false}
           axisLine={false}
         />

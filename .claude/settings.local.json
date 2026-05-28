@@ -3,7 +3,17 @@
     "allow": [
       "Bash(npm run *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git stash *)",
+      "Bash(git rebase *)",
+      "Bash(git commit -m 'fix: parseFloat all Postgres numeric fields before .toFixed\\(\\) *)",
+      "Bash(git commit -m 'ux: show KZT chart above price table on /trading *)",
+      "Bash(git commit *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

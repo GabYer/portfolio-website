@@ -21,6 +21,14 @@ interface CryptoRow {
   current_price_usd: number;
   price_change_pct_24h: number;
   market_cap_usd: number;
+  // any timestamp column the table might have
+  updated_at?: string;
+  loaded_at?: string;
+  fetched_at?: string;
+  created_at?: string;
+  price_timestamp?: string;
+  last_updated?: string;
+  [key: string]: unknown;
 }
 
 interface KztRow {
@@ -51,13 +59,14 @@ function fmtCap(v: unknown) {
 }
 
 export default function TradingPage() {
-  const [cryptos, setCryptos]         = useState<CryptoRow[]>([]);
-  const [chartData, setChartData]     = useState<KztRow[]>([]);
-  const [selectedSymbol, setSelected] = useState("BTC");
-  const [loading, setLoading]         = useState(true);
+  const [cryptos, setCryptos]           = useState<CryptoRow[]>([]);
+  const [chartData, setChartData]       = useState<KztRow[]>([]);
+  const [selectedSymbol, setSelected]   = useState("BTC");
+  const [loading, setLoading]           = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
-  const [lastUpdate, setLastUpdate]   = useState<Date | null>(null);
-  const [error, setError]             = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate]     = useState<Date | null>(null);
+  const [dataTs, setDataTs]             = useState<string | null>(null); // timestamp from DB row
+  const [error, setError]               = useState<string | null>(null);
 
   async function loadCryptos() {
     setLoading(true);
@@ -66,8 +75,17 @@ export default function TradingPage() {
       const res  = await fetch("/api/crypto");
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "API error");
-      setCryptos(json.data ?? []);
+      const rows: CryptoRow[] = json.data ?? [];
+      setCryptos(rows);
       setLastUpdate(new Date());
+
+      // Pick the first timestamp-like column from the first row
+      const TS_COLS = ["updated_at","loaded_at","fetched_at","created_at","price_timestamp","last_updated"];
+      if (rows.length > 0) {
+        for (const col of TS_COLS) {
+          if (rows[0][col]) { setDataTs(String(rows[0][col])); break; }
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -98,8 +116,13 @@ export default function TradingPage() {
           <h1 className="text-2xl font-bold text-white">Crypto Trading</h1>
           <p className="text-slate-400 text-sm mt-1">
             Live prices from CoinGecko via PostgreSQL
-            {lastUpdate && ` · Updated ${lastUpdate.toLocaleTimeString()}`}
+            {lastUpdate && ` · Fetched ${lastUpdate.toLocaleTimeString()}`}
           </p>
+          {dataTs && (
+            <p className="text-slate-500 text-xs mt-0.5">
+              Data timestamp: {new Date(dataTs).toLocaleString()}
+            </p>
+          )}
         </div>
         <button
           onClick={loadCryptos}
@@ -181,6 +204,11 @@ export default function TradingPage() {
           cryptos.map((c) => {
             const change = toNum(c.price_change_pct_24h);
             const up = change >= 0;
+
+            // Find whichever timestamp column exists in this row
+            const TS_COLS = ["updated_at","loaded_at","fetched_at","created_at","price_timestamp","last_updated"];
+            const rowTs = TS_COLS.map(k => c[k]).find(v => v != null);
+
             return (
               <div
                 key={c.coin_id}
@@ -193,6 +221,11 @@ export default function TradingPage() {
                   <div>
                     <p className="text-sm font-semibold text-white">{c.symbol}</p>
                     <p className="text-xs text-slate-500 capitalize">{c.coin_id}</p>
+                    {rowTs && (
+                      <p className="text-[10px] text-slate-600 font-mono">
+                        {new Date(String(rowTs)).toLocaleString()}
+                      </p>
+                    )}
                   </div>
                 </div>
 
