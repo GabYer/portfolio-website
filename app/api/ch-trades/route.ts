@@ -1,27 +1,18 @@
 import { NextResponse } from "next/server";
 import { chQuery, CH_SYMBOLS, n } from "@/lib/clickhouse";
+import type { OhlcvRow } from "@/types/trading";
 
 export const dynamic = "force-dynamic";
 
-export interface OhlcvRow {
-  minute: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  trade_count: number;
-}
-
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const rawSymbol = (searchParams.get("symbol") ?? "BTCUSDT").toUpperCase();
-
-  if (!(CH_SYMBOLS as readonly string[]).includes(rawSymbol)) {
-    return NextResponse.json({ error: "Invalid symbol" }, { status: 400 });
-  }
-
   try {
+    const { searchParams } = new URL(req.url);
+    const rawSymbol = (searchParams.get("symbol") ?? "BTCUSDT").toUpperCase();
+
+    if (!(CH_SYMBOLS as readonly string[]).includes(rawSymbol)) {
+      return NextResponse.json({ error: "Invalid symbol" }, { status: 400 });
+    }
+
     const rows = await chQuery<Record<string, unknown>>(`
       SELECT
         toStartOfMinute(timestamp)     AS minute,
@@ -50,11 +41,10 @@ export async function GET(req: Request) {
     }));
 
     return NextResponse.json({ data, symbol: rawSymbol });
+
   } catch (err) {
-    console.error("ch-trades error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "ClickHouse query failed" },
-      { status: 500 }
-    );
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[ch-trades]", msg);
+    return NextResponse.json({ error: msg, data: [] }, { status: 500 });
   }
 }

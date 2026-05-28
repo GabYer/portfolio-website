@@ -1,26 +1,19 @@
 import { NextResponse } from "next/server";
 import { chQuery, CH_SYMBOLS, n } from "@/lib/clickhouse";
+import type { BuySellRow } from "@/types/trading";
 
 export const dynamic = "force-dynamic";
 
-export interface BuySellRow {
-  minute: string;
-  buy_volume: number;
-  sell_volume: number;
-  buy_count: number;
-  sell_count: number;
-}
-
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const rawSymbol = (searchParams.get("symbol") ?? "BTCUSDT").toUpperCase();
-  const minutes   = Math.min(parseInt(searchParams.get("minutes") ?? "30"), 120);
-
-  if (!(CH_SYMBOLS as readonly string[]).includes(rawSymbol)) {
-    return NextResponse.json({ error: "Invalid symbol" }, { status: 400 });
-  }
-
   try {
+    const { searchParams } = new URL(req.url);
+    const rawSymbol = (searchParams.get("symbol") ?? "BTCUSDT").toUpperCase();
+    const minutes   = Math.min(parseInt(searchParams.get("minutes") ?? "30"), 120);
+
+    if (!(CH_SYMBOLS as readonly string[]).includes(rawSymbol)) {
+      return NextResponse.json({ error: "Invalid symbol" }, { status: 400 });
+    }
+
     const rows = await chQuery<Record<string, unknown>>(`
       SELECT
         minute,
@@ -43,11 +36,10 @@ export async function GET(req: Request) {
     }));
 
     return NextResponse.json({ data, symbol: rawSymbol });
+
   } catch (err) {
-    console.error("ch-buysell error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "ClickHouse query failed" },
-      { status: 500 }
-    );
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[ch-buysell]", msg);
+    return NextResponse.json({ error: msg, data: [] }, { status: 500 });
   }
 }

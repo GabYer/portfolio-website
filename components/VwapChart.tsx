@@ -4,7 +4,7 @@ import {
   ComposedChart, Area, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
-import type { VwapRow } from "@/app/api/ch-vwap/route";
+import type { VwapRow } from "@/types/trading";
 
 function fmtTime(v: unknown) {
   try {

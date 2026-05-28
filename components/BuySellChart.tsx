@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
-import type { BuySellRow } from "@/app/api/ch-buysell/route";
+import type { BuySellRow } from "@/types/trading";
 
 function fmtTime(v: unknown) {
   try {

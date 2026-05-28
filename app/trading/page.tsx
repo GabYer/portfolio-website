@@ -4,9 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { RefreshCw, TrendingUp, TrendingDown, Zap } from "lucide-react";
 import { SYMBOL_LABELS, CH_SYMBOLS } from "@/lib/clickhouse";
-import type { VwapRow }    from "@/app/api/ch-vwap/route";
-import type { BuySellRow } from "@/app/api/ch-buysell/route";
-import type { OhlcvRow }   from "@/app/api/ch-trades/route";
+import type { VwapRow, BuySellRow, OhlcvRow } from "@/types/trading";
 
 /* ── dynamic imports (recharts needs browser APIs) ── */
 const VwapChart = dynamic(() => import("@/components/VwapChart"), {
@@ -67,8 +65,20 @@ export default function TradingPage() {
         fetch(`/api/ch-trades?symbol=${sym}`),
       ]);
 
+      // Parse JSON safely — if server returns HTML (500 page), give a clear message
+      const safeJson = async (res: Response, label: string) => {
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch {
+          throw new Error(`${label} → HTTP ${res.status}: ${text.slice(0, 200)}`);
+        }
+      };
+
       const [vJson, bJson, tJson] = await Promise.all([
-        vRes.json(), bRes.json(), tRes.json(),
+        safeJson(vRes, "ch-vwap"),
+        safeJson(bRes, "ch-buysell"),
+        safeJson(tRes, "ch-trades"),
       ]);
 
       if (!vRes.ok) throw new Error(vJson.error ?? "VWAP fetch failed");
