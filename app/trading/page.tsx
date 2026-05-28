@@ -116,11 +116,11 @@ export default function TradingPage() {
           <h1 className="text-2xl font-bold text-white">Crypto Trading</h1>
           <p className="text-slate-400 text-sm mt-1">
             Live prices from CoinGecko via PostgreSQL
-            {lastUpdate && ` · Fetched ${lastUpdate.toLocaleTimeString()}`}
+            {lastUpdate && ` · Fetched ${lastUpdate.toLocaleTimeString("ru-KZ", { timeZone: "Asia/Almaty" })}`}
           </p>
           {dataTs && (
             <p className="text-slate-500 text-xs mt-0.5">
-              Data timestamp: {new Date(dataTs).toLocaleString()}
+              Data timestamp: {new Date(dataTs).toLocaleString("ru-KZ", { timeZone: "Asia/Almaty" })}
             </p>
           )}
         </div>
@@ -223,7 +223,7 @@ export default function TradingPage() {
                     <p className="text-xs text-slate-500 capitalize">{c.coin_id}</p>
                     {rowTs && (
                       <p className="text-[10px] text-slate-600 font-mono">
-                        {new Date(String(rowTs)).toLocaleString()}
+                        {new Date(String(rowTs)).toLocaleString("ru-KZ", { timeZone: "Asia/Almaty" })}
                       </p>
                     )}
                   </div>
