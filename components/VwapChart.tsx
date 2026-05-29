@@ -8,7 +8,9 @@ import type { VwapRow } from "@/types/trading";
 
 function fmtTime(v: unknown) {
   try {
-    return new Date(String(v)).toLocaleTimeString("ru-KZ", {
+    const s = String(v);
+    const utc = s.replace(" ", "T") + (s.includes("Z") ? "" : "Z");
+    return new Date(utc).toLocaleTimeString("ru-KZ", {
       timeZone: "Asia/Almaty",
       hour: "2-digit", minute: "2-digit",
     });

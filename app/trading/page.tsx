@@ -36,7 +36,9 @@ function fmtVol(v: number) {
 
 function fmtTime(v: string) {
   try {
-    return new Date(v).toLocaleTimeString("ru-KZ", {
+    // ClickHouse returns UTC datetimes without 'Z' — add it so JS parses as UTC
+    const utc = String(v).replace(" ", "T") + (String(v).includes("Z") ? "" : "Z");
+    return new Date(utc).toLocaleTimeString("ru-KZ", {
       timeZone: "Asia/Almaty",
       hour: "2-digit", minute: "2-digit",
     });
