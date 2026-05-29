@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Newspaper, TrendingUp, TrendingDown, DollarSign, RefreshCw } from "lucide-react";
+import { Newspaper, DollarSign, RefreshCw } from "lucide-react";
+import { CURRENCY_COLORS } from "@/components/ForexChart";
 
 const ForexChart = dynamic(() => import("@/components/ForexChart"), {
   ssr: false,
@@ -62,12 +63,22 @@ function timeAgo(dt: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+type ChartRow = { rate_date: string } & Record<string, number | string>;
+
 export default function AnalyticsPage() {
   const [forex,  setForex]  = useState<ForexRow[]>([]);
   const [trend,  setTrend]  = useState<TrendRow[]>([]);
   const [news,   setNews]   = useState<NewsRow[]>([]);
-  const [selectedCurrency, setSelectedCurrency] = useState("USD");
+  const [selectedCurrencies, setSelectedCurrencies] = useState<string[]>(["USD"]);
   const [loading, setLoading] = useState(true);
+
+  function toggleCurrency(code: string) {
+    setSelectedCurrencies((prev) =>
+      prev.includes(code)
+        ? prev.length > 1 ? prev.filter((c) => c !== code) : prev   // keep at least one
+        : [...prev, code]
+    );
+  }
 
   useEffect(() => {
     async function load() {
@@ -97,14 +108,19 @@ export default function AnalyticsPage() {
     return { code, rate };
   });
 
-  const chartData = trend
-    .filter((r) => r.currency_code === selectedCurrency)
-    .slice()
-    .reverse()
-    .slice(-30);
-
-  const lastPoint   = chartData[chartData.length - 1];
-  const dayChangeUp = toNum(lastPoint?.day_change) >= 0;
+  // Pivot trend rows → { rate_date, USD: 485, EUR: 563, ... }
+  const chartData: ChartRow[] = (() => {
+    const map = new Map<string, ChartRow>();
+    trend.forEach((r) => {
+      if (!selectedCurrencies.includes(r.currency_code)) return;
+      const date = String(r.rate_date).slice(0, 10);
+      if (!map.has(date)) map.set(date, { rate_date: date });
+      map.get(date)![r.currency_code] = toNum(r.rate_per_unit);
+    });
+    return Array.from(map.values())
+      .sort((a, b) => a.rate_date.localeCompare(b.rate_date))
+      .slice(-30);
+  })();
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 space-y-8">
@@ -127,22 +143,34 @@ export default function AnalyticsPage() {
             ? Array(5).fill(0).map((_, i) => (
                 <div key={i} className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-4 animate-pulse h-20" />
               ))
-            : latestForex.map(({ code, rate }) => (
-                <button
-                  key={code}
-                  onClick={() => setSelectedCurrency(code)}
-                  className={`rounded-2xl border p-4 text-left transition-all hover:scale-105 ${
-                    selectedCurrency === code
-                      ? "border-blue-500/50 bg-blue-500/10"
-                      : "border-slate-800 bg-[#1a1f2e] hover:border-slate-700"
-                  }`}
-                >
-                  <p className="text-xs text-slate-500 mb-1">{code} / KZT</p>
-                  <p className="text-lg font-bold text-white">
-                    {rate != null ? `₸ ${rate.toFixed(2)}` : "—"}
-                  </p>
-                </button>
-              ))}
+            : latestForex.map(({ code, rate }) => {
+                const active  = selectedCurrencies.includes(code);
+                const color   = CURRENCY_COLORS[code] ?? "#94a3b8";
+                return (
+                  <button
+                    key={code}
+                    onClick={() => toggleCurrency(code)}
+                    className={`rounded-2xl border p-4 text-left transition-all hover:scale-105 relative ${
+                      active
+                        ? "bg-[#1a1f2e]"
+                        : "border-slate-800 bg-[#1a1f2e] opacity-50 hover:opacity-75"
+                    }`}
+                    style={active ? { borderColor: color + "66" } : undefined}
+                  >
+                    {/* colour dot + checkbox indicator */}
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs text-slate-500">{code} / KZT</p>
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ background: active ? color : "#334155" }}
+                      />
+                    </div>
+                    <p className="text-lg font-bold text-white">
+                      {rate != null ? `₸ ${rate.toFixed(2)}` : "—"}
+                    </p>
+                  </button>
+                );
+              })}
         </div>
       </section>
 
@@ -150,17 +178,12 @@ export default function AnalyticsPage() {
       <section className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-6 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h2 className="text-lg font-bold text-white">{selectedCurrency}/KZT — 30-day trend</h2>
+            <h2 className="text-lg font-bold text-white">
+              {selectedCurrencies.join(" · ")}/KZT — 30-day trend
+            </h2>
             <p className="text-slate-500 text-xs mt-0.5">mart.mart_forex_trend</p>
           </div>
-          {!loading && lastPoint && (
-            <div className={`flex items-center gap-1 text-sm font-semibold ${dayChangeUp ? "text-green-400" : "text-red-400"}`}>
-              {dayChangeUp
-                ? <TrendingUp className="h-4 w-4" />
-                : <TrendingDown className="h-4 w-4" />}
-              {dayChangeUp ? "+" : ""}{toNum(lastPoint.day_change).toFixed(2)} KZT today
-            </div>
-          )}
+          <p className="text-xs text-slate-500">Click cards to toggle currencies</p>
         </div>
 
         {loading ? (
@@ -169,10 +192,10 @@ export default function AnalyticsPage() {
           </div>
         ) : chartData.length === 0 ? (
           <div className="h-56 flex items-center justify-center text-slate-500 text-sm">
-            No trend data for {selectedCurrency}
+            No trend data
           </div>
         ) : (
-          <ForexChart data={chartData} />
+          <ForexChart data={chartData} currencies={selectedCurrencies} />
         )}
       </section>
 
