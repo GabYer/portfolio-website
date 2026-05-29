@@ -1,6 +1,6 @@
 /**
  * ClickHouse HTTP API client
- * Auth: Cloudflare Zero Trust Service Token + ClickHouse credentials
+ * Auth: ClickHouse password only (no Cloudflare Zero Trust)
  * Endpoint: https://clickhouse.gabyer.dev (port 8123 proxied via Cloudflare Tunnel)
  */
 
@@ -26,12 +26,6 @@ interface CHResponse<T> {
   statistics: { elapsed: number; rows_read: number; bytes_read: number };
 }
 
-function getEnv(key: string): string {
-  const v = process.env[key];
-  if (!v) throw new Error(`Missing env var: ${key}`);
-  return v;
-}
-
 /**
  * Execute a raw SQL query against ClickHouse.
  * FORMAT JSON is appended automatically — do NOT include it in the query.
@@ -39,18 +33,17 @@ function getEnv(key: string): string {
 export async function chQuery<T = Record<string, unknown>>(
   query: string
 ): Promise<T[]> {
+  const password = process.env.CLICKHOUSE_PASSWORD;
+  if (!password) throw new Error("Missing env var: CLICKHOUSE_PASSWORD");
+
   const res = await fetch(CH_URL, {
     method: "POST",
     cache: "no-store",
     headers: {
-      // Cloudflare Zero Trust Service Token
-      "CF-Access-Client-Id":     getEnv("CF_CLIENT_ID"),
-      "CF-Access-Client-Secret": getEnv("CF_CLIENT_SECRET"),
-      // ClickHouse credentials
-      "X-ClickHouse-User":       CH_USER,
-      "X-ClickHouse-Key":        getEnv("CLICKHOUSE_PASSWORD"),
-      "X-ClickHouse-Database":   CH_DATABASE,
-      "Content-Type":            "text/plain; charset=utf-8",
+      "X-ClickHouse-User":     CH_USER,
+      "X-ClickHouse-Key":      password,
+      "X-ClickHouse-Database": CH_DATABASE,
+      "Content-Type":          "text/plain; charset=utf-8",
     },
     body: query.trim() + "\nFORMAT JSON",
   });
