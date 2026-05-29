@@ -36,16 +36,16 @@ export async function chQuery<T = Record<string, unknown>>(
   const password = process.env.CLICKHOUSE_PASSWORD;
   if (!password) throw new Error("Missing env var: CLICKHOUSE_PASSWORD");
 
-  const res = await fetch(CH_URL, {
-    method: "POST",
+  // Use GET + ?query= param (POST may be blocked by Cloudflare tunnel)
+  const url = new URL(CH_URL);
+  url.searchParams.set("query", query.trim() + " FORMAT JSON");
+  url.searchParams.set("database", CH_DATABASE);
+  url.searchParams.set("user", CH_USER);
+  url.searchParams.set("password", password);
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
     cache: "no-store",
-    headers: {
-      "X-ClickHouse-User":     CH_USER,
-      "X-ClickHouse-Key":      password,
-      "X-ClickHouse-Database": CH_DATABASE,
-      "Content-Type":          "text/plain; charset=utf-8",
-    },
-    body: query.trim() + "\nFORMAT JSON",
   });
 
   if (!res.ok) {

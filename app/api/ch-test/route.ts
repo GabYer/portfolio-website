@@ -17,16 +17,15 @@ export async function GET() {
   let rawStatus = 0;
   let rawBody   = "";
   try {
-    const res = await fetch("https://clickhouse.gabyer.dev", {
-      method: "POST",
+    const url = new URL("https://clickhouse.gabyer.dev");
+    url.searchParams.set("query",    "SELECT 1 FORMAT JSON");
+    url.searchParams.set("database", "trading");
+    url.searchParams.set("user",     "default");
+    url.searchParams.set("password", password);
+
+    const res = await fetch(url.toString(), {
+      method: "GET",
       cache:  "no-store",
-      headers: {
-        "X-ClickHouse-User":     "default",
-        "X-ClickHouse-Key":      password,
-        "X-ClickHouse-Database": "trading",
-        "Content-Type":          "text/plain",
-      },
-      body: "SELECT 1 FORMAT JSON",
     });
     rawStatus = res.status;
     rawBody   = (await res.text()).slice(0, 500);
