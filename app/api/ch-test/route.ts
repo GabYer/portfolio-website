@@ -20,7 +20,7 @@ export async function GET() {
     const url = new URL("https://ch-api.gabyer.dev");
     url.searchParams.set("query",    "SELECT 1 FORMAT JSON");
     url.searchParams.set("database", "trading");
-    url.searchParams.set("user",     "default");
+    url.searchParams.set("user",     "admin");
     url.searchParams.set("password", password);
 
     const res = await fetch(url.toString(), {

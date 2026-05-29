@@ -5,7 +5,7 @@
  */
 
 const CH_URL      = "https://ch-api.gabyer.dev";
-const CH_USER     = "default";
+const CH_USER     = "admin";
 const CH_DATABASE = "trading";
 
 /** Symbols allowed in queries — whitelist prevents SQL injection */
