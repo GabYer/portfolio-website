@@ -17,11 +17,12 @@ export async function GET(req: Request) {
     const rows = await chQuery<Record<string, unknown>>(`
       SELECT
         minute,
-        buy_volume,
-        sell_volume
+        sum(buy_volume)  AS buy_volume,
+        sum(sell_volume) AS sell_volume
       FROM trading.mv_buysell_1min
       WHERE symbol = '${rawSymbol}'
         AND minute >= now() - INTERVAL ${minutes} MINUTE
+      GROUP BY minute
       ORDER BY minute ASC
     `);
 
