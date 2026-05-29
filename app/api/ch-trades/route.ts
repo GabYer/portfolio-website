@@ -15,16 +15,16 @@ export async function GET(req: Request) {
 
     const rows = await chQuery<Record<string, unknown>>(`
       SELECT
-        toStartOfMinute(timestamp)     AS minute,
-        argMin(price, timestamp)       AS open,
+        toStartOfMinute(trade_time)    AS minute,
+        argMin(price, trade_time)      AS open,
         max(price)                     AS high,
         min(price)                     AS low,
-        argMax(price, timestamp)       AS close,
+        argMax(price, trade_time)      AS close,
         sum(quantity)                  AS volume,
         count()                        AS trade_count
       FROM trading.binance_trades
-      WHERE symbol   = '${rawSymbol}'
-        AND timestamp >= now() - INTERVAL 1 HOUR
+      WHERE symbol     = '${rawSymbol}'
+        AND trade_time >= now() - INTERVAL 1 HOUR
       GROUP BY minute
       ORDER BY minute DESC
       LIMIT 60
