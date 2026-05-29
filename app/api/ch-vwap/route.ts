@@ -18,8 +18,7 @@ export async function GET(req: Request) {
       SELECT
         minute,
         vwap,
-        total_volume,
-        trade_count
+        total_volume
       FROM trading.mv_vwap_1min
       WHERE symbol = '${rawSymbol}'
         AND minute >= now() - INTERVAL ${hours} HOUR
@@ -30,7 +29,6 @@ export async function GET(req: Request) {
       minute:       String(r.minute),
       vwap:         n(r.vwap),
       total_volume: n(r.total_volume),
-      trade_count:  n(r.trade_count),
     }));
 
     return NextResponse.json({ data, symbol: rawSymbol });

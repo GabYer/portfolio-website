@@ -18,9 +18,7 @@ export async function GET(req: Request) {
       SELECT
         minute,
         buy_volume,
-        sell_volume,
-        buy_count,
-        sell_count
+        sell_volume
       FROM trading.mv_buysell_1min
       WHERE symbol = '${rawSymbol}'
         AND minute >= now() - INTERVAL ${minutes} MINUTE
@@ -31,8 +29,6 @@ export async function GET(req: Request) {
       minute:      String(r.minute),
       buy_volume:  n(r.buy_volume),
       sell_volume: n(r.sell_volume),
-      buy_count:   n(r.buy_count),
-      sell_count:  n(r.sell_count),
     }));
 
     return NextResponse.json({ data, symbol: rawSymbol });
