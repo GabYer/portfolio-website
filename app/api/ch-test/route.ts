@@ -17,7 +17,7 @@ export async function GET() {
   let rawStatus = 0;
   let rawBody   = "";
   try {
-    const url = new URL("https://clickhouse.gabyer.dev");
+    const url = new URL("https://ch-api.gabyer.dev");
     url.searchParams.set("query",    "SELECT 1 FORMAT JSON");
     url.searchParams.set("database", "trading");
     url.searchParams.set("user",     "default");

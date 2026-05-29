@@ -4,7 +4,7 @@
  * Endpoint: https://clickhouse.gabyer.dev (port 8123 proxied via Cloudflare Tunnel)
  */
 
-const CH_URL      = "https://clickhouse.gabyer.dev";
+const CH_URL      = "https://ch-api.gabyer.dev";
 const CH_USER     = "default";
 const CH_DATABASE = "trading";
 
