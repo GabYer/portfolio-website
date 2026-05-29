@@ -43,6 +43,13 @@ interface NewsRow {
 
 const CURRENCIES = ["USD", "EUR", "RUB", "CNY", "GBP"];
 
+const PERIODS: { label: string; days: number }[] = [
+  { label: "30d",  days: 30  },
+  { label: "6m",   days: 180 },
+  { label: "1y",   days: 365 },
+  { label: "3y",   days: 1095 },
+];
+
 const CATEGORY_COLORS: Record<string, string> = {
   crypto:  "bg-orange-500/20 text-orange-400 border-orange-500/30",
   forex:   "bg-blue-500/20   text-blue-400   border-blue-500/30",
@@ -70,6 +77,7 @@ export default function AnalyticsPage() {
   const [trend,  setTrend]  = useState<TrendRow[]>([]);
   const [news,   setNews]   = useState<NewsRow[]>([]);
   const [selectedCurrencies, setSelectedCurrencies] = useState<string[]>(["USD"]);
+  const [period, setPeriod] = useState(30);
   const [loading, setLoading] = useState(true);
 
   function toggleCurrency(code: string) {
@@ -80,13 +88,14 @@ export default function AnalyticsPage() {
     );
   }
 
+  // Reload forex + news only once; reload trend whenever period changes
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
         const [fRes, tRes, nRes] = await Promise.all([
           fetch("/api/forex"),
-          fetch("/api/forex-trend"),
+          fetch(`/api/forex-trend?days=${period}`),
           fetch("/api/news"),
         ]);
         const [fJson, tJson, nJson] = await Promise.all([
@@ -100,7 +109,7 @@ export default function AnalyticsPage() {
       }
     }
     load();
-  }, []);
+  }, [period]);
 
   const latestForex = CURRENCIES.map((code) => {
     const row = forex.find((r) => r.currency_code === code);
@@ -176,14 +185,29 @@ export default function AnalyticsPage() {
 
       {/* Trend chart */}
       <section className="rounded-2xl border border-slate-800 bg-[#1a1f2e] p-6 space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h2 className="text-lg font-bold text-white">
-              {selectedCurrencies.join(" · ")}/KZT — 30-day trend
+              {selectedCurrencies.join(" · ")}/KZT — trend
             </h2>
-            <p className="text-slate-500 text-xs mt-0.5">mart.mart_forex_trend</p>
+            <p className="text-slate-500 text-xs mt-0.5">mart.mart_forex_trend · click cards to toggle</p>
           </div>
-          <p className="text-xs text-slate-500">Click cards to toggle currencies</p>
+          {/* Period selector */}
+          <div className="flex gap-1">
+            {PERIODS.map(({ label, days }) => (
+              <button
+                key={label}
+                onClick={() => setPeriod(days)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  period === days
+                    ? "bg-blue-500 text-white"
+                    : "bg-slate-800 text-slate-400 hover:text-white border border-slate-700"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (
