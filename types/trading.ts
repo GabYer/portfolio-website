@@ -3,7 +3,7 @@
 export interface VwapRow {
   minute:       string;
   vwap:         number;
-  total_volume: number;
+  volume: number;
 }
 
 export interface BuySellRow {

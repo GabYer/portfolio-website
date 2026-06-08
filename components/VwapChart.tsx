@@ -26,7 +26,7 @@ interface TooltipProps { active?: boolean; payload?: TooltipPayload[]; label?: s
 function CustomTooltip({ active, payload, label }: TooltipProps) {
   if (!active || !payload?.length) return null;
   const vwap   = payload.find((p) => p.dataKey === "vwap");
-  const volume = payload.find((p) => p.dataKey === "total_volume");
+  const volume = payload.find((p) => p.dataKey === "volume");
   return (
     <div className="rounded-xl border border-slate-700 bg-[#0f1117] p-3 text-sm shadow-xl">
       <p className="text-slate-400 mb-2 text-xs">{fmtTime(label)}</p>
@@ -84,7 +84,7 @@ export default function VwapChart({ data }: { data: VwapRow[] }) {
         />
         <Bar
           yAxisId="vol"
-          dataKey="total_volume"
+          dataKey="volume"
           fill="#3b82f6"
           fillOpacity={0.3}
           radius={[2, 2, 0, 0]}
